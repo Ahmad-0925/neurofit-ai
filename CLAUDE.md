@@ -62,11 +62,7 @@ neurofit-ai/
 3. **ml_predictions** — id, user_id(FK), model_name, input_data, output_data, timestamp
 4. **ai_chats** — id, user_id(FK), message, response, timestamp
 
-## Environment Variables (.env)
-```
-DATABASE_URL=postgresql://postgres:Ahmad786g%40@localhost:5432/neurofit
-SECRET_KEY=mysecretkey123456789
-```
+
 
 ## How to Run Locally
 ```bash
