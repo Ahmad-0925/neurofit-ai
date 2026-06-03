@@ -31,7 +31,7 @@ def create_profile(token: str, data: dict):
 
 def update_profile(token: str, data: dict):
     headers = {"Authorization": f"Bearer {token}"}
-    response = requests.put(f"{BASE_URL}/profile/", json=data, heagit statusders=headers)
+    response = requests.put(f"{BASE_URL}/profile/", json=data, headers=headers)
     return response
 
 

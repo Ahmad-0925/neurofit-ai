@@ -1,5 +1,5 @@
 import streamlit as st
-from utils.api import signup, login
+from utils.api import signup, login, create_profile, get_profile
 
 st.set_page_config(page_title="NeuroFit AI", page_icon="💪")
 
@@ -31,7 +31,9 @@ def login_page():
             st.error("Please fill in all fields.")
             return
 
-        response = login(email, password)
+        with st.spinner("Logging in..."):
+            response = login(email, password)
+
         if response.status_code == 200:
             data = response.json()
             st.session_state["token"] = data["access_token"]
@@ -61,7 +63,9 @@ def signup_page():
             st.error("Please fill in all fields.")
             return
 
-        response = signup(name, email, password)
+        with st.spinner("Creating account..."):
+            response = signup(name, email, password)
+
         if response.status_code == 200:
             data = response.json()
             st.session_state["token"] = data["access_token"]
@@ -78,13 +82,114 @@ def signup_page():
                 detail = "Signup failed"
             st.error(f"Signup failed: {detail}")
 
+def profile_page():
+    st.title("Your Fitness Profile 💪")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        age = st.slider("Age", 10, 100, 25)
+        weight = st.slider("Weight (kg)", 30, 300, 70)
+        height_feet = st.selectbox("Height (feet)", [4, 5, 6, 7])
+        height_inches = st.selectbox("Height (inches)", list(range(0, 12)))
+    
+    with col2:
+        gender = st.selectbox("Gender", ["male", "female"])
+        goal = st.selectbox("Goal", ["lose_weight", "gain_muscle", "maintain"])
+        activity_level = st.selectbox("Activity Level", ["sedentary", "light", "moderate", "active"])
+
+    if st.button("Save Profile", use_container_width=True):
+        data = {
+            "age": age,
+            "weight": weight,
+            "height_feet": height_feet,
+            "height_inches": height_inches,
+            "gender": gender,
+            "goal": goal,
+            "activity_level": activity_level
+        }
+
+        with st.spinner("Saving profile..."):
+            response = create_profile(st.session_state["token"], data)
+
+        if response.status_code == 200:
+            st.session_state["profile"] = response.json()
+            st.session_state["page"] = "dashboard"
+            st.success("Profile saved!")
+            st.rerun()
+        else:
+            try:
+                detail = response.json().get("detail", "Failed to save profile")
+            except:
+                detail = "Failed to save profile"
+            st.error(f"Failed to save profile: {detail}")
+
 def dashboard_page():
     st.title("Dashboard 🏠")
     st.write(f"Welcome, {st.session_state['user']['name']}!")
-    st.info("Profile and metrics will appear here in later modules.")
 
-    if st.button("Logout"):
-        logout()
+    if st.session_state["profile"] is None:
+        token = st.session_state["token"]
+
+        with st.spinner("Loading profile..."):
+            response = get_profile(token)
+
+        if response.status_code == 200:
+            st.session_state["profile"] = response.json()
+        elif response.status_code == 404:
+            st.warning("No profile found!")
+            if st.button("Create Profile 💪", use_container_width=True):
+                st.session_state["page"] = "profile"
+                st.rerun()
+            return
+        else:
+            st.error("Failed to load profile!")
+            return
+
+    profile = st.session_state["profile"]
+
+    bmi = profile.get("bmi", 0)
+    bmi_category = profile.get("bmi_category", "Unknown")
+
+    if bmi_category == "Normal":
+        bmi_color = "green"
+    elif bmi_category == "Underweight":
+        bmi_color = "orange"
+    elif bmi_category == "Overweight":
+        bmi_color = "orange"
+    else:
+        bmi_color = "red"
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("BMI", f"{bmi:.1f}")
+        st.markdown(f"<p style='color:{bmi_color};font-weight:bold;'>{bmi_category}</p>", unsafe_allow_html=True)
+    with col2:
+        st.metric("TDEE", f"{int(profile.get('tdee', 0))} kcal")
+    with col3:
+        st.metric("Goal", profile.get("goal", "maintain").replace("_", " ").title())
+
+    st.subheader("Calorie Targets 🎯")
+    tdee = profile.get("tdee", 0)
+    cut = round(tdee - 500, 2)
+    maintain = tdee
+    bulk = round(tdee + 500, 2)
+
+    col4, col5, col6 = st.columns(3)
+    with col4:
+        st.metric("Cut ✂️", f"{cut} kcal")
+    with col5:
+        st.metric("Maintain ⚖️", f"{maintain} kcal")
+    with col6:
+        st.metric("Bulk 💪", f"{bulk} kcal")
+
+    st.divider()
+    st.subheader("Profile Details")
+    c1, c2 = st.columns(2)
+    c1.write(f"**Age:** {profile.get('age')} years")
+    c1.write(f"**Weight:** {profile.get('weight')} kg")
+    c2.write(f"**Gender:** {profile.get('gender', '').title()}")
+    c2.write(f"**Activity:** {profile.get('activity_level', '').replace('_', ' ').title()}")
 
 if st.session_state["token"] is None:
     auth_page = st.sidebar.radio("Navigation", ["Login", "Sign Up"])
@@ -93,12 +198,25 @@ if st.session_state["token"] is None:
     else:
         signup_page()
 else:
-    if st.session_state["page"] == "login":
+    st.sidebar.title("NeuroFit AI 💪")
+    st.sidebar.write(f"👤 {st.session_state['user']['name']}")
+    st.sidebar.divider()
+
+    nav = st.sidebar.radio("Navigation", ["Dashboard", "Profile"], 
+                           index=0 if st.session_state["page"] == "dashboard" else 1)
+
+    if nav == "Dashboard":
         st.session_state["page"] = "dashboard"
-        st.rerun()
-    elif st.session_state["page"] == "dashboard":
+    elif nav == "Profile":
+        st.session_state["page"] = "profile"
+
+    st.sidebar.divider()
+    if st.sidebar.button("Logout", use_container_width=True):
+        logout()
+
+    if st.session_state["page"] == "dashboard":
         dashboard_page()
     elif st.session_state["page"] == "profile":
-        st.write("Profile form will go here (Module 4)")
+        profile_page()
     else:
         dashboard_page()
