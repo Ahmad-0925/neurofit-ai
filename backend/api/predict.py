@@ -3,11 +3,12 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.security import get_current_user
 from db.models import User, FitnessProfile, MLPrediction
-from services.ml_service import predict_fitness_score
 import json
+from services.ml_service import predict_fitness_score, explain_prediction
 
 router = APIRouter(prefix="/predict", tags=["ML Prediction"])
 
+@router.post("/")
 @router.post("/")
 def get_prediction(
     db: Session = Depends(get_db),
@@ -18,6 +19,15 @@ def get_prediction(
         raise HTTPException(status_code=404, detail="Profile not found! Create profile first.")
 
     score = predict_fitness_score(
+        age=profile.age,
+        weight=profile.weight,
+        height=profile.height,
+        bmi=profile.bmi,
+        tdee=profile.tdee,
+        activity_level=profile.activity_level
+    )
+
+    explanation = explain_prediction(
         age=profile.age,
         weight=profile.weight,
         height=profile.height,
@@ -39,14 +49,15 @@ def get_prediction(
         user_id=current_user.id,
         model_name="fitness_score_v1",
         input_data=json.dumps(input_data),
-        output_data=json.dumps({"fitness_score": score})
+        output_data=json.dumps({"fitness_score": score, "explanation": explanation})
     )
     db.add(prediction_record)
     db.commit()
 
     return {
         "fitness_score": score,
-        "message": get_score_message(score)
+        "message": get_score_message(score),
+        "explanation": explanation
     }
 
 def get_score_message(score: float) -> str:
